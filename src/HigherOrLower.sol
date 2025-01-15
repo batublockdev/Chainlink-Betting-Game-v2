@@ -36,7 +36,9 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
 contract HigherOrLower is VRFConsumerBaseV2Plus {
     error HigherOrLower_IncorrectInvestmentAmount();
     error HigherOrLower_NotEnoughFundsToBet();
-
+    error HigherOrLower_GAME_NOT_OPEN();
+    error HigherOrLower_TooMuchFundsToBet();
+    error HigherOrLower_IncorrectBet();
     /* Type declarations */
     enum Bet {
         HIGH,
@@ -56,6 +58,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     uint32 private immutable i_callbackGasLimit;
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
     uint32 private constant NUM_WORDS = 1;
+    mapping(address => uint) owners_balances;
 
     // Lottery Variables
     uint256 private immutable i_interval;
@@ -63,11 +66,19 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     bool private s_BetState;
     uint256 private s_lastTimeStamp;
     address private s_recentWinner;
-    address payable[] private s_players;
+    address payable private s_player;
+    address payable[] private s_owners;
     Bet private s_bet;
+    uint256 private s_betAmount;
     Bet_State private s_betState;
+    uint256 private s_MaxBet = 1 ether * s_owners.length;
     uint256 private constant INVEST_AMOUNT = 5 ether;
     uint256 private constant MIN_BET = 1 ether;
+
+    modifier Game_State() {
+        if (s_BetState != Bet_State.OPEN) revert HigherOrLower_GAME_NOT_OPEN();
+        _;
+    }
 
     constructor(
         address s_vrfCoordinator,
@@ -87,23 +98,38 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         s_bet = Bet.HIGH; // or any default state
     }
 
-    function invest() public payable {
+    function invest() public payable Game_State {
         if (msg.value != INVEST_AMOUNT) {
             revert HigherOrLower_IncorrectInvestmentAmount();
         }
+
+        s_owners.push(msg.sender);
+        owners_balances[msg.sender] += msg.value;
     }
 
-    function bet() public payable {
-        if (msg.value != MIN_BET) {
+    function bet(uint256 bet_player) public payable {
+        if (msg.value < MIN_BET) {
             revert HigherOrLower_NotEnoughFundsToBet();
         }
+        if (msg.value > s_MaxBet) {
+            revert HigherOrLower_TooMuchFundsToBet();
+        }
+        if (0 > bet_player > 2) {
+            revert HigherOrLower_IncorrectBet();
+        }
+        s_betState = Bet_State.CLOSED;
+        s_bet = bet_player;
+        s_player = payable(msg.sender);
+        s_betAmount = msg.value;
     }
 
-    function checkUpkeep(bytes memory /* checkData */ )
+    function checkUpkeep(
+        bytes memory /* checkData */
+    )
         public
         view
         override
-        returns (bool upkeepNeeded, bytes memory /* performData */ )
+        returns (bool upkeepNeeded, bytes memory /* performData */)
     {
         bool isOpen = RaffleState.OPEN == s_raffleState;
         bool timePassed = ((block.timestamp - s_lastTimeStamp) > i_interval);
@@ -117,11 +143,15 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
      * @dev Once `checkUpkeep` is returning `true`, this function is called
      * and it kicks off a Chainlink VRF call to get a random winner.
      */
-    function performUpkeep(bytes calldata /* performData */ ) external override {
-        (bool upkeepNeeded,) = checkUpkeep("");
+    function performUpkeep(bytes calldata /* performData */) external override {
+        (bool upkeepNeeded, ) = checkUpkeep("");
         // require(upkeepNeeded, "Upkeep not needed");
         if (!upkeepNeeded) {
-            revert Raffle__UpkeepNotNeeded(address(this).balance, s_players.length, uint256(s_raffleState));
+            revert Raffle__UpkeepNotNeeded(
+                address(this).balance,
+                s_players.length,
+                uint256(s_raffleState)
+            );
         }
 
         s_raffleState = RaffleState.CALCULATING;
@@ -148,26 +178,28 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
      * @dev This is the function that Chainlink VRF node
      * calls to send the money to the random winner.
      */
-    function fulfillRandomWords(uint256, /* requestId */ uint256[] calldata randomWords) internal override {
+    function fulfillRandomWords(
+        uint256,
+        /* requestId */ uint256[] calldata randomWords
+    ) internal override {
         // s_players size 10
         // randomNumber 202
         // 202 % 10 ? what's doesn't divide evenly into 202?
         // 20 * 10 = 200
         // 2
         // 202 % 10 = 2
-        uint256 indexOfWinner = randomWords[0] % 10;
-        s_recentWinner = s_players[indexOfWinner];
+        uint256 number_card = randomWords[0] % 10;
+
         s_players = new address payable[](0);
         s_raffleState = RaffleState.OPEN;
         s_lastTimeStamp = block.timestamp;
         emit WinnerPicked(recentWinner);
-        (bool success,) = recentWinner.call{value: address(this).balance}("");
+        (bool success, ) = recentWinner.call{value: address(this).balance}("");
         // require(success, "Transfer failed");
         if (!success) {
             revert Raffle__TransferFailed();
         }
     }
-
 
     function WinnerWithdraw() public {}
 
