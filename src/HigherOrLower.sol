@@ -72,6 +72,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     uint256 private s_betAmount;
     Bet_State private s_betState;
     uint256 private s_MaxBet = 1 ether * s_owners.length;
+    //Initial card is 3
+    uint256 private s_previousCard = 3;
     uint256 private constant INVEST_AMOUNT = 5 ether;
     uint256 private constant MIN_BET = 1 ether;
 
@@ -189,16 +191,25 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         // 2
         // 202 % 10 = 2
         uint256 number_card = randomWords[0] % 10;
-
+        if (number_card > s_previousCard) {
+            if (s_bet == Bet.HIGH) {
+                (bool success, ) = recentWinner.call{
+                    value: address(this).balance
+                }("");
+                // require(success, "Transfer failed");
+                if (!success) {
+                    revert Raffle__TransferFailed();
+                }
+            }
+        } else if (number_card == s_previousCard) {
+            s_bet = Bet.EQUAL;
+        } else {
+            s_bet = Bet.LOW;
+        }
         s_players = new address payable[](0);
         s_raffleState = RaffleState.OPEN;
         s_lastTimeStamp = block.timestamp;
         emit WinnerPicked(recentWinner);
-        (bool success, ) = recentWinner.call{value: address(this).balance}("");
-        // require(success, "Transfer failed");
-        if (!success) {
-            revert Raffle__TransferFailed();
-        }
     }
 
     function WinnerWithdraw() public {}
