@@ -39,6 +39,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     error HigherOrLower_GAME_NOT_OPEN();
     error HigherOrLower_TooMuchFundsToBet();
     error HigherOrLower_IncorrectBet();
+    error HigherOrLower_BalanceIs0_Or_AddressIsnotValid();
+    error HigherOrLower_NotEnoughFundsToWithdraw();
     /* Type declarations */
     enum Bet {
         HIGH,
@@ -71,6 +73,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     Bet private s_bet;
     uint256 private s_betAmount;
     Bet_State private s_betState;
+    uint256 private s_owners_length = s_owners.length;
+    uint256 private s_min_amount_owners = 5 ether;
     uint256 private s_MaxBet = 1 ether * s_owners.length;
     //Initial card is 3
     uint256 private s_previousCard = 3;
@@ -109,7 +113,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         owners_balances[msg.sender] += msg.value;
     }
 
-    function bet(uint256 bet_player) public payable {
+    function bet(uint256 bet_player) public payable Game_State {
         if (msg.value < MIN_BET) {
             revert HigherOrLower_NotEnoughFundsToBet();
         }
@@ -193,22 +197,22 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         uint256 number_card = randomWords[0] % 10;
         if (number_card > s_previousCard) {
             if (s_bet == Bet.HIGH) {
-                WinnerWithdraw(s_player, s_betAmount * 2);
-                PayBet(s_betAmount);
+                WinnerWithdraw();
+                PayBet();
             } else {
                 GetBetOwner();
             }
         } else if (number_card == s_previousCard) {
             if (s_bet == Bet.EQUAL) {
-                WinnerWithdraw(s_player, s_betAmount * 2);
-                PayBet(s_betAmount);
+                WinnerWithdraw();
+                PayBet();
             } else {
                 GetBetOwner();
             }
         } else {
             if (s_bet == Bet.LOW) {
-                WinnerWithdraw(s_player, s_betAmount * 2);
-                PayBet(s_betAmount);
+                WinnerWithdraw();
+                PayBet();
             } else {
                 GetBetOwner();
             }
@@ -219,29 +223,57 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         emit WinnerPicked(recentWinner);
     }
 
-    function WinnerWithdraw(address winner, uint256 amount) internal {
-        (bool callSuccess, ) = s_player.call{value: amount}("");
+    function WinnerWithdraw() internal {
+        (bool callSuccess, ) = s_player.call{value: s_betAmount * 2}("");
         require(callSuccess, "Call failedxx");
     }
 
-    function PayBet(uint256 amount) internal {
-        uint256 length_owners = s_owners.length;
-        uint256 amount_to_pay = amount / length_owners;
-        for (uint256 i = 0; i < length_owners; i++) {
+    function PayBet() internal {
+        uint256 amount_to_pay = s_betAmount / s_owners_length;
+        for (uint256 i = 0; i < s_owners_length; i++) {
             owners_balances[s_owners[i]] -= amount_to_pay;
+            if (owners_balances[s_owners[i]] == 0) {
+                // dellete data array
+                for (uint256 x = i; x < s_owners.length - 1; i++) {
+                    s_owners[x] = s_owners[x + 1];
+                }
+                s_owners.pop();
+            }
+            if (s_min_amount_owners > owners_balances[s_owners[i]]) {
+                s_min_amount_owners = owners_balances[s_owners[i]];
+            }
         }
+        s_MaxBet = s_min_amount_owners * s_owners.length;
     }
 
     function GetBetOwner() internal {
         uint256 length_owners = s_owners.length;
-        uint256 amount_to_pay = this.balance - s_betAmount;
+        uint256 total_Amount_Invested = this.balance - s_betAmount;
         for (uint256 i = 0; i < length_owners; i++) {
             uint256 s_percentage = (owners_balances[s_owners[i]] * 100) /
-                (amount_to_pay);
+                (total_Amount_Invested);
             uint256 amount_to_pay_owner = (s_percentage * s_betAmount) / 100;
             owners_balances[s_owners[i]] += amount_to_pay_owner;
         }
     }
 
-    function OwnerWithdraw() public {}
+    function OwnerWithdraw(uint256 amount_toWithdraw) public Game_State {
+        if (owners_balances[msg.sender] == 0) {
+            revert HigherOrLower_BalanceIs0_Or_AddressIsnotValid();
+        }
+        if ((owners_balances[msg.sender] - INVEST_AMOUNT) < amount_toWithdraw) {
+            revert HigherOrLower_NotEnoughFundsToWithdraw();
+        }
+        (bool callSuccess, ) = msg.sender.call{value: amount_toWithdraw}("");
+        require(callSuccess, "Call failed");
+        owners_balances[msg.sender] = 0;
+    }
+
+    function OwnerBalance() public Game_State {
+        if (owners_balances[msg.sender] == 0) {
+            revert HigherOrLower_BalanceIs0_Or_AddressIsnotValid();
+        }
+        uint256 amount = owners_balances[msg.sender] - INVEST_AMOUNT;
+        return amount;
+    }
 }
