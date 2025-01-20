@@ -104,13 +104,17 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         s_bet = Bet.HIGH; // or any default state
     }
 
-    function invest() public payable Game_State {
+    function invest() public payable {
+        if (s_BetState == Bet_State.CALCULATING) {
+            revert HigherOrLower_GAME_NOT_OPEN();
+        }
         if (msg.value < INVEST_AMOUNT) {
             revert HigherOrLower_IncorrectInvestmentAmount();
         }
 
         s_owners.push(msg.sender);
         owners_balances[msg.sender] += msg.value;
+        s_betState = Bet_State.OPEN;
     }
 
     function bet(uint256 bet_player) public payable Game_State {
@@ -160,7 +164,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
             );
         }
 
-        s_raffleState = RaffleState.CALCULATING;
+        s_BetState = Bet_State.CALCULATING;
 
         // Will revert if subscription is not set and funded.
         uint256 requestId = s_vrfCoordinator.requestRandomWords(
@@ -217,8 +221,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
                 GetBetOwner();
             }
         }
-        s_players = new address payable[](0);
-        s_raffleState = RaffleState.OPEN;
+        s_player = new address payable;
+
         s_lastTimeStamp = block.timestamp;
         emit WinnerPicked(recentWinner);
     }
@@ -233,28 +237,41 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         for (uint256 i = 0; i < s_owners_length; i++) {
             owners_balances[s_owners[i]] -= amount_to_pay;
             if (owners_balances[s_owners[i]] == 0) {
-                // dellete data array
-                for (uint256 x = i; x < s_owners.length - 1; i++) {
-                    s_owners[x] = s_owners[x + 1];
+                if (s_owners_length == 1) {
+                    s_owners.pop();
+                    s_betState = Bet_State.CLOSED;
+                } else {
+                    // dellete data array
+                    for (uint256 x = i; x < s_owners_length - 1; i++) {
+                        s_owners[x] = s_owners[x + 1];
+                    }
+                    s_owners.pop();
                 }
-                s_owners.pop();
-            }
-            if (s_min_amount_owners > owners_balances[s_owners[i]]) {
+            } else if (s_min_amount_owners > owners_balances[s_owners[i]]) {
                 s_min_amount_owners = owners_balances[s_owners[i]];
             }
         }
-        s_MaxBet = s_min_amount_owners * s_owners.length;
+        if (s_min_amount_owners < 1) {
+            s_MaxBet = s_min_amount_owners * s_owners.length;
+            s_betState = Bet_State.OPEN;
+        } else {
+            s_MaxBet = 1 ether * s_owners.length;
+            s_betState = Bet_State.OPEN;
+        }
     }
 
     function GetBetOwner() internal {
-        uint256 length_owners = s_owners.length;
         uint256 total_Amount_Invested = this.balance - s_betAmount;
-        for (uint256 i = 0; i < length_owners; i++) {
+        for (uint256 i = 0; i < s_owners_length; i++) {
             uint256 s_percentage = (owners_balances[s_owners[i]] * 100) /
                 (total_Amount_Invested);
             uint256 amount_to_pay_owner = (s_percentage * s_betAmount) / 100;
             owners_balances[s_owners[i]] += amount_to_pay_owner;
+            if (owners_balances[s_owners[i]] == s_min_amount_owners) {
+                s_min_amount_owners += amount_to_pay_owner;
+            }
         }
+        s_betState = Bet_State.OPEN;
     }
 
     function OwnerWithdraw(uint256 amount_toWithdraw) public Game_State {
