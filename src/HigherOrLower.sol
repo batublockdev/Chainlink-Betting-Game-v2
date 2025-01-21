@@ -25,6 +25,7 @@ pragma solidity 0.8.19;
 // imports
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
 /**
  * @title HigherOrLower betting game
@@ -33,7 +34,7 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
  * @dev This contract is a work in progress and is not yet complete (Impelements Chainlink VRF)
  */
 
-contract HigherOrLower is VRFConsumerBaseV2Plus {
+contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     error HigherOrLower_IncorrectInvestmentAmount();
     error HigherOrLower_NotEnoughFundsToBet();
     error HigherOrLower_GAME_NOT_OPEN();
@@ -41,6 +42,12 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     error HigherOrLower_IncorrectBet();
     error HigherOrLower_BalanceIs0_Or_AddressIsnotValid();
     error HigherOrLower_NotEnoughFundsToWithdraw();
+    error HigherOrLower_UpkeepNotNeeded(
+        uint256 currentBalance,
+        address player,
+        uint256 bet_State
+    );
+
     /* Type declarations */
     enum Bet {
         HIGH,
@@ -50,7 +57,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     enum Bet_State {
         OPEN,
         CLOSED,
-        CALCULATING
+        CALCULATING,
+        ONGAME
     }
 
     /* State variables */
@@ -65,7 +73,6 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     // Lottery Variables
     uint256 private immutable i_interval;
     uint256 private immutable i_entranceFee;
-    bool private s_BetState;
     uint256 private s_lastTimeStamp;
     address private s_recentWinner;
     address payable private s_player;
@@ -82,9 +89,13 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     uint256 private constant MIN_BET = 1 ether;
 
     modifier Game_State() {
-        if (s_BetState != Bet_State.OPEN) revert HigherOrLower_GAME_NOT_OPEN();
+        if (s_betState != Bet_State.OPEN) revert HigherOrLower_GAME_NOT_OPEN();
         _;
     }
+
+    /* Events */
+    event State_Bet(uint256 indexed betState);
+    event CurrentCard(uint256 indexed card);
 
     constructor(
         address s_vrfCoordinator,
@@ -105,16 +116,20 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     }
 
     function invest() public payable {
-        if (s_BetState == Bet_State.CALCULATING) {
+        if (
+            s_betState == Bet_State.CALCULATING ||
+            s_betState == Bet_State.ONGAME
+        ) {
             revert HigherOrLower_GAME_NOT_OPEN();
         }
         if (msg.value < INVEST_AMOUNT) {
             revert HigherOrLower_IncorrectInvestmentAmount();
         }
 
-        s_owners.push(msg.sender);
+        s_owners.push(payable(msg.sender));
         owners_balances[msg.sender] += msg.value;
         s_betState = Bet_State.OPEN;
+        emit State_Bet(uint256(s_betState));
     }
 
     function bet(uint256 bet_player) public payable Game_State {
@@ -124,11 +139,12 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         if (msg.value > s_MaxBet) {
             revert HigherOrLower_TooMuchFundsToBet();
         }
-        if (0 > bet_player > 2) {
+        if (bet_player < 0 || bet_player > 2) {
             revert HigherOrLower_IncorrectBet();
         }
-        s_betState = Bet_State.CLOSED;
-        s_bet = bet_player;
+        s_betState = Bet_State.ONGAME;
+        emit State_Bet(uint256(s_betState));
+        s_bet = Bet(bet_player);
         s_player = payable(msg.sender);
         s_betAmount = msg.value;
     }
@@ -141,9 +157,9 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         override
         returns (bool upkeepNeeded, bytes memory /* performData */)
     {
-        bool isOpen = RaffleState.OPEN == s_raffleState;
+        bool isOpen = Bet_State.ONGAME == s_betState;
         bool timePassed = ((block.timestamp - s_lastTimeStamp) > i_interval);
-        bool hasPlayers = s_players.length > 0;
+        bool hasPlayers = s_player != address(0);
         bool hasBalance = address(this).balance > 0;
         upkeepNeeded = (timePassed && isOpen && hasBalance && hasPlayers);
         return (upkeepNeeded, "0x0"); // can we comment this out?
@@ -157,14 +173,15 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         (bool upkeepNeeded, ) = checkUpkeep("");
         // require(upkeepNeeded, "Upkeep not needed");
         if (!upkeepNeeded) {
-            revert Raffle__UpkeepNotNeeded(
+            revert HigherOrLower_UpkeepNotNeeded(
                 address(this).balance,
-                s_players.length,
-                uint256(s_raffleState)
+                s_player,
+                uint256(s_betState)
             );
         }
 
-        s_BetState = Bet_State.CALCULATING;
+        s_betState = Bet_State.CALCULATING;
+        emit State_Bet(uint256(s_betState));
 
         // Will revert if subscription is not set and funded.
         uint256 requestId = s_vrfCoordinator.requestRandomWords(
@@ -180,8 +197,6 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
                 )
             })
         );
-        // Quiz... is this redundant?
-        emit RequestedRaffleWinner(requestId);
     }
 
     /**
@@ -221,10 +236,10 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
                 GetBetOwner();
             }
         }
-        s_player = new address payable;
-
+        s_previousCard = number_card;
+        emit CurrentCard(number_card);
+        s_player = payable(address(0));
         s_lastTimeStamp = block.timestamp;
-        emit WinnerPicked(recentWinner);
     }
 
     function WinnerWithdraw() internal {
@@ -261,7 +276,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
     }
 
     function GetBetOwner() internal {
-        uint256 total_Amount_Invested = this.balance - s_betAmount;
+        uint256 total_Amount_Invested = address(this).balance - s_betAmount;
         for (uint256 i = 0; i < s_owners_length; i++) {
             uint256 s_percentage = (owners_balances[s_owners[i]] * 100) /
                 (total_Amount_Invested);
@@ -286,11 +301,19 @@ contract HigherOrLower is VRFConsumerBaseV2Plus {
         owners_balances[msg.sender] = 0;
     }
 
-    function OwnerBalance() public Game_State {
+    function OwnerBalance() public view Game_State returns (uint256) {
         if (owners_balances[msg.sender] == 0) {
             revert HigherOrLower_BalanceIs0_Or_AddressIsnotValid();
         }
         uint256 amount = owners_balances[msg.sender] - INVEST_AMOUNT;
         return amount;
+    }
+
+    function getPreviousCard() public view returns (uint256) {
+        return s_previousCard;
+    }
+
+    function getOwners() public view returns (address payable[] memory) {
+        return s_owners;
     }
 }
