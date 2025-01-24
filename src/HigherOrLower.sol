@@ -35,6 +35,7 @@ import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/inter
  */
 
 contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
+    // errors
     error HigherOrLower_IncorrectInvestmentAmount();
     error HigherOrLower_NotEnoughFundsToBet();
     error HigherOrLower_GAME_NOT_OPEN();
@@ -70,9 +71,11 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     uint32 private constant NUM_WORDS = 1;
     mapping(address => uint) owners_balances;
 
-    // Lottery Variables
+    // Game Variables
     uint256 private immutable i_interval;
     uint256 private immutable i_entranceFee;
+    uint256 private constant INVEST_AMOUNT = 5 ether;
+    uint256 private constant MIN_BET = 1 ether;
     uint256 private s_lastTimeStamp;
     address private s_recentWinner;
     address payable private s_player;
@@ -81,12 +84,12 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     uint256 private s_betAmount;
     Bet_State private s_betState;
     uint256 private s_owners_length = s_owners.length;
-    uint256 private s_min_amount_owners = 5 ether;
-    uint256 private s_MaxBet = 1 ether * s_owners.length;
-    //Initial card is 3
+    uint256 private s_min_amount_owners = INVEST_AMOUNT;
+    uint256 private s_MaxBet = MIN_BET * s_owners.length;
+    /**
+     * @dev To start the game the contract denominated the number 3 as the first card
+     */
     uint256 private s_previousCard = 3;
-    uint256 private constant INVEST_AMOUNT = 5 ether;
-    uint256 private constant MIN_BET = 1 ether;
 
     modifier Game_State() {
         if (s_betState != Bet_State.OPEN) revert HigherOrLower_GAME_NOT_OPEN();
@@ -276,6 +279,10 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     }
 
     function GetBetOwner() internal {
+        /**
+         * @dev If the player loses the bet, the amount is distributed to the owners
+         * proportionally to the amount they invested in the game before this round.
+         */
         uint256 total_Amount_Invested = address(this).balance - s_betAmount;
         for (uint256 i = 0; i < s_owners_length; i++) {
             uint256 s_percentage = (owners_balances[s_owners[i]] * 100) /
