@@ -19,7 +19,7 @@ contract HigherOrLowerTest is Test, CodeConstants {
     event RaffleEnter(address indexed player);
     event WinnerPicked(address indexed player);
 
-    Raffle public raffle;
+    HigherOrLower public higherOrLower;
     HelperConfig public helperConfig;
 
     uint256 subscriptionId;
@@ -31,13 +31,15 @@ contract HigherOrLowerTest is Test, CodeConstants {
     LinkToken link;
 
     address public PLAYER = makeAddr("player");
+    address public PLAYER2 = makeAddr("player2");
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
     uint256 public constant LINK_BALANCE = 100 ether;
 
     function setUp() external {
-        DeployRaffle deployer = new DeployRaffle();
-        (raffle, helperConfig) = deployer.run();
+        DeployHigherOrLower deployer = new DeployHigherOrLower();
+        (higherOrLower, helperConfig) = deployer.run();
         vm.deal(PLAYER, STARTING_USER_BALANCE);
+        vm.deal(PLAYER2, STARTING_USER_BALANCE);
 
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
         subscriptionId = config.subscriptionId;
@@ -58,5 +60,75 @@ contract HigherOrLowerTest is Test, CodeConstants {
         }
         link.approve(vrfCoordinatorV2_5, LINK_BALANCE);
         vm.stopPrank();
+    }
+
+    function testGameInitializesInOpenState() public {
+        assertEq(
+            higherOrLower.getBet_State(),
+            uint256(HigherOrLower.Bet_State.OPEN)
+        );
+    }
+
+    function testHigherOrLower_IncorrectInvestmentAmount() public {
+        vm.prank(PLAYER);
+        vm.expectRevert(
+            HigherOrLower.HigherOrLower_IncorrectInvestmentAmount.selector
+        );
+        higherOrLower.invest();
+    }
+
+    function testOwnerInvested() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 8 ether}();
+        vm.prank(PLAYER);
+        assertEq(higherOrLower.getOwnerBalance(), 3 ether);
+    }
+
+    function testOwneradd() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 8 ether}();
+        vm.prank(PLAYER);
+        assertEq(higherOrLower.getOwners(0), PLAYER);
+    }
+
+    function testInvenstBetStateChanged() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 8 ether}();
+        vm.prank(PLAYER);
+        assertEq(higherOrLower.getOwners(0), PLAYER);
+    }
+
+    //bet
+
+    function testHigherOrLower_NotEnoughFundsToBet() public {
+        vm.prank(PLAYER);
+        vm.expectRevert(
+            HigherOrLower.HigherOrLower_NotEnoughFundsToBet.selector
+        );
+        higherOrLower.bet(0);
+    }
+
+    function testHigherOrLower_TooMuchFundsToBet() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.expectRevert(HigherOrLower.HigherOrLower_TooMuchFundsToBet.selector);
+        higherOrLower.bet{value: 3 ether}(0);
+    }
+
+    function testHigherOrLower_IncorrectBet() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        console2.log("max to bet", higherOrLower.getMaxtoBet());
+        vm.expectRevert(HigherOrLower.HigherOrLower_IncorrectBet.selector);
+        higherOrLower.bet{value: 2 ether}(6);
+    }
+
+    function testBetData_GAME_NOT_OPEN() public {
+        vm.expectRevert(HigherOrLower.HigherOrLower_GAME_NOT_OPEN.selector);
+        higherOrLower.bet{value: 2 ether}(0);
     }
 }

@@ -77,15 +77,14 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     uint256 private constant INVEST_AMOUNT = 5 ether;
     uint256 private constant MIN_BET = 1 ether;
     uint256 private s_lastTimeStamp;
-    address private s_recentWinner;
     address payable private s_player;
     address payable[] private s_owners;
     Bet private s_bet;
     uint256 private s_betAmount;
     Bet_State private s_betState;
-    uint256 private s_owners_length = s_owners.length;
-    uint256 private s_min_amount_owners = INVEST_AMOUNT;
-    uint256 private s_MaxBet = MIN_BET * s_owners.length;
+    uint256 private s_owners_length;
+    uint256 private s_min_amount_owners;
+    uint256 private s_MaxBet;
     /**
      * @dev To start the game the contract denominated the number 3 as the first card
      */
@@ -101,21 +100,24 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     event CurrentCard(uint256 indexed card);
 
     constructor(
-        address s_vrfCoordinator,
         uint256 subscriptionId,
-        bytes32 gasLane,
-        uint32 callbackGasLimit,
+        bytes32 gasLane, // keyHash
         uint256 interval,
-        uint256 entranceFee
-    ) VRFConsumerBaseV2Plus(s_vrfCoordinator) {
+        uint256 entranceFee,
+        uint32 callbackGasLimit,
+        address vrfCoordinatorV2
+    ) VRFConsumerBaseV2Plus(vrfCoordinatorV2) {
         i_subscriptionId = subscriptionId;
         i_gasLane = gasLane;
         i_callbackGasLimit = callbackGasLimit;
         i_interval = interval;
         i_entranceFee = entranceFee;
         s_lastTimeStamp = block.timestamp;
-        s_betState = Bet_State.OPEN;
+        s_betState = Bet_State.CLOSED;
         s_bet = Bet.HIGH; // or any default state
+
+        s_min_amount_owners = INVEST_AMOUNT;
+        s_owners_length = s_owners.length;
     }
 
     function invest() public payable {
@@ -128,8 +130,18 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (msg.value < INVEST_AMOUNT) {
             revert HigherOrLower_IncorrectInvestmentAmount();
         }
-
-        s_owners.push(payable(msg.sender));
+        uint256 index = s_owners.length;
+        bool exist = false;
+        for (uint256 x = 0; x < index; x++) {
+            if (s_owners[x] == payable(msg.sender)) {
+                exist = true;
+                break;
+            }
+        }
+        if (!exist) {
+            s_owners.push(payable(msg.sender));
+        }
+        s_MaxBet = MIN_BET * s_owners.length;
         owners_balances[msg.sender] += msg.value;
         s_betState = Bet_State.OPEN;
         emit State_Bet(uint256(s_betState));
@@ -308,7 +320,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         owners_balances[msg.sender] = 0;
     }
 
-    function OwnerBalance() public view Game_State returns (uint256) {
+    function getOwnerBalance() public view Game_State returns (uint256) {
         if (owners_balances[msg.sender] == 0) {
             revert HigherOrLower_BalanceIs0_Or_AddressIsnotValid();
         }
@@ -320,7 +332,21 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         return s_previousCard;
     }
 
-    function getOwners() public view returns (address payable[] memory) {
-        return s_owners;
+    function getOwners(
+        uint256 indexOwners
+    ) external view returns (address payable) {
+        return s_owners[indexOwners];
+    }
+
+    function getBet_State() public view returns (uint256) {
+        return uint256(s_betState);
+    }
+
+    function getBet() public view returns (uint256) {
+        return uint256(s_bet);
+    }
+
+    function getMaxtoBet() public view returns (uint256) {
+        return uint256(s_MaxBet);
     }
 }

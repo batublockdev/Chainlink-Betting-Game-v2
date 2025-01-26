@@ -4,11 +4,10 @@ pragma solidity ^0.8.19;
 import {Script} from "forge-std/Script.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 import {HigherOrLower} from "../src/HigherOrLower.sol";
-
-//import {AddConsumer, CreateSubscription, FundSubscription} from "./Interactions.s.sol";
+import {AddConsumer, CreateSubscription, FundSubscription} from "./Interactions.s.sol";
 
 contract DeployHigherOrLower is Script {
-    function run() external returns (Raffle, HelperConfig) {
+    function run() external returns (HigherOrLower, HelperConfig) {
         HelperConfig helperConfig = new HelperConfig(); // This comes with our mocks!
         AddConsumer addConsumer = new AddConsumer();
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
@@ -35,7 +34,7 @@ contract DeployHigherOrLower is Script {
         }
 
         vm.startBroadcast(config.account);
-        Raffle raffle = new Raffle(
+        HigherOrLower raffle = new HigherOrLower(
             config.subscriptionId,
             config.gasLane,
             config.automationUpdateInterval,
