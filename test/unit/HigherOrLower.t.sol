@@ -32,14 +32,21 @@ contract HigherOrLowerTest is Test, CodeConstants {
 
     address public PLAYER = makeAddr("player");
     address public PLAYER2 = makeAddr("player2");
-    uint256 public constant STARTING_USER_BALANCE = 10 ether;
+    address public PLAYER3 = makeAddr("player3");
+    address public PLAYER4 = makeAddr("player4");
+    address public PLAYER5 = makeAddr("player5");
+
+    uint256 public constant STARTING_USER_BALANCE = 5 ether;
     uint256 public constant LINK_BALANCE = 100 ether;
 
     function setUp() external {
         DeployHigherOrLower deployer = new DeployHigherOrLower();
         (higherOrLower, helperConfig) = deployer.run();
-        vm.deal(PLAYER, STARTING_USER_BALANCE);
+        vm.deal(PLAYER, 3 ether);
         vm.deal(PLAYER2, STARTING_USER_BALANCE);
+        vm.deal(PLAYER3, STARTING_USER_BALANCE);
+        vm.deal(PLAYER4, STARTING_USER_BALANCE);
+        vm.deal(PLAYER5, STARTING_USER_BALANCE);
 
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
         subscriptionId = config.subscriptionId;
@@ -62,11 +69,21 @@ contract HigherOrLowerTest is Test, CodeConstants {
         vm.stopPrank();
     }
 
-    function testGameInitializesInOpenState() public {
+    function testGameInitializesInClosedState() public {
         assertEq(
             higherOrLower.getBet_State(),
-            uint256(HigherOrLower.Bet_State.OPEN)
+            uint256(HigherOrLower.Bet_State.CLOSED)
         );
+    }
+
+    function testHigherOrLower_GAME_NOT_OPEN_INVEST() public {
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 1 ether}(2);
+        vm.prank(PLAYER2);
+        vm.expectRevert(HigherOrLower.HigherOrLower_GAME_NOT_OPEN.selector);
+        higherOrLower.invest();
     }
 
     function testHigherOrLower_IncorrectInvestmentAmount() public {
@@ -102,6 +119,8 @@ contract HigherOrLowerTest is Test, CodeConstants {
 
     function testHigherOrLower_NotEnoughFundsToBet() public {
         vm.prank(PLAYER);
+        higherOrLower.invest{value: 8 ether}();
+        vm.prank(PLAYER);
         vm.expectRevert(
             HigherOrLower.HigherOrLower_NotEnoughFundsToBet.selector
         );
@@ -130,5 +149,264 @@ contract HigherOrLowerTest is Test, CodeConstants {
     function testBetData_GAME_NOT_OPEN() public {
         vm.expectRevert(HigherOrLower.HigherOrLower_GAME_NOT_OPEN.selector);
         higherOrLower.bet{value: 2 ether}(0);
+    }
+
+    function testBetOngoing() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        higherOrLower.bet{value: 2 ether}(0);
+        assertEq(
+            higherOrLower.getBet_State(),
+            uint256(HigherOrLower.Bet_State.ONGAME)
+        );
+    }
+
+    function testBetOption() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        higherOrLower.bet{value: 2 ether}(0);
+        assertEq(higherOrLower.getBet(), uint256(HigherOrLower.Bet.LOW));
+    }
+
+    function testBetPlayer() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 2 ether}(0);
+        assertEq(higherOrLower.getPlayer(), PLAYER);
+    }
+
+    function testBetPlayerAmount() public {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 2 ether}(0);
+        assertEq(higherOrLower.getBetAmount(), 2 ether);
+    }
+
+    function testDontAllowPlayersToEnterWhileRaffleIsCalculating() public {
+        // Arrange
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 2 ether}(0);
+        vm.warp(block.timestamp + automationUpdateInterval + 1);
+        vm.roll(block.number + 1);
+        higherOrLower.performUpkeep("");
+
+        // Act / Assert
+        vm.expectRevert(HigherOrLower.HigherOrLower_GAME_NOT_OPEN.selector);
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 2 ether}(0);
+    }
+
+    function testCheckUpkeepReturnsFalseIfItHasNoBalance() public {
+        // Arrange
+        vm.warp(block.timestamp + automationUpdateInterval + 1);
+        vm.roll(block.number + 1);
+
+        // Act
+        (bool upkeepNeeded, ) = higherOrLower.checkUpkeep("");
+
+        // Assert
+        assert(!upkeepNeeded);
+    }
+
+    function testDataisGood() public {
+        // Arrange
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 2 ether}(0);
+        vm.warp(block.timestamp + automationUpdateInterval + 1);
+        vm.roll(block.number + 1);
+        higherOrLower.performUpkeep("");
+
+        // Act
+        (bool upkeepNeeded, ) = higherOrLower.checkUpkeep("");
+        console2.log("Bet state", higherOrLower.getBet_State());
+        console2.log("PLayer", higherOrLower.getPlayer());
+
+        // Assert
+        assert(upkeepNeeded);
+    }
+
+    function testPerformUpkeepRevertsIfCheckUpkeepIsFalse() public {
+        // Arrange
+        uint256 currentBalance = 0;
+        uint256 numPlayers = 0;
+        HigherOrLower.Bet_State rState = HigherOrLower.Bet_State(
+            higherOrLower.getBet_State()
+        );
+        // Act / Assert
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                HigherOrLower.HigherOrLower_UpkeepNotNeeded.selector,
+                currentBalance,
+                numPlayers,
+                rState
+            )
+        );
+        higherOrLower.performUpkeep("");
+    }
+
+    function testPerformUpkeepUpdatesRaffleStateAndEmitsRequestId() public {
+        // Arrange
+
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 1 ether}(0);
+        vm.warp(block.timestamp + automationUpdateInterval + 1);
+        vm.roll(block.number + 1);
+
+        // Act
+        vm.recordLogs();
+        higherOrLower.performUpkeep(""); // emits requestId
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+
+        // Assert
+        HigherOrLower.Bet_State rState = HigherOrLower.Bet_State(
+            higherOrLower.getBet_State()
+        );
+        // requestId = raffle.getLastRequestId();
+        assert(uint256(requestId) > 0);
+        assert(uint256(rState) == 2); // 0 = open, 1 = calculating
+    }
+
+    modifier raffleEntered() {
+        vm.prank(PLAYER);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 2 ether}(0);
+        vm.warp(block.timestamp + automationUpdateInterval + 1);
+        vm.roll(block.number + 1);
+
+        _;
+    }
+
+    modifier skipFork() {
+        if (block.chainid != 31337) {
+            return;
+        }
+        _;
+    }
+
+    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep()
+        public
+        raffleEntered
+        skipFork
+    {
+        // Arrange
+        // Act / Assert
+        vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
+        // vm.mockCall could be used here...
+        VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fulfillRandomWords(
+            0,
+            address(higherOrLower)
+        );
+
+        vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
+        VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fulfillRandomWords(
+            1,
+            address(higherOrLower)
+        );
+    }
+
+    function testFulfillRandomWordsPicksAWinnerResetsAndSendsMoney()
+        public
+        skipFork
+    {
+        // Arrange
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER3);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER4);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER5);
+        higherOrLower.invest{value: 5 ether}();
+        vm.warp(block.timestamp + automationUpdateInterval + 1);
+        vm.roll(block.number + 1);
+
+        vm.prank(PLAYER);
+        higherOrLower.bet{value: 3 ether}(1);
+
+        uint256 startingTimeStamp = higherOrLower.getLastTimeStamp();
+        uint256 previousCard = higherOrLower.getPreviousCard();
+        console2.log("max to bet", higherOrLower.getPreviousCard());
+
+        uint256 bet = higherOrLower.getBet();
+
+        // Act
+        vm.recordLogs();
+        higherOrLower.performUpkeep(""); // emits requestId
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        console2.logBytes32(entries[1].topics[1]);
+        bytes32 requestId = 0x0000000000000000000000000000000000000000000000000000000000000001; // get the requestId from the logs
+
+        VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fulfillRandomWords(
+            uint256(requestId),
+            address(higherOrLower)
+        );
+
+        // Assert
+        uint256 newCard = higherOrLower.getPreviousCard();
+        console2.log("new", higherOrLower.getPreviousCard());
+
+        bool betWin = false;
+
+        if (previousCard > newCard) {
+            if (bet == 0) {
+                betWin = true;
+            } else {
+                betWin = false;
+            }
+        }
+        if (previousCard == newCard) {
+            if (bet == 1) {
+                betWin = true;
+            } else {
+                betWin = false;
+            }
+        }
+        if (previousCard < newCard) {
+            if (bet == 2) {
+                betWin = true;
+            } else {
+                betWin = false;
+            }
+        }
+
+        if (betWin) {
+            uint256 winnerBalance = PLAYER.balance;
+            uint256 endingTimeStamp = higherOrLower.getLastTimeStamp();
+            assert(winnerBalance == (3 ether) * 2);
+            assert(endingTimeStamp > startingTimeStamp);
+        } else {
+            uint256 endingTimeStamp = higherOrLower.getLastTimeStamp();
+            vm.prank(PLAYER2);
+            uint256 winnerBalance = higherOrLower.getOwnerBalance();
+            vm.prank(PLAYER2);
+            console2.log("Owner", higherOrLower.getOwnerBalance());
+
+            assert(winnerBalance > 0 ether);
+            assert(endingTimeStamp > startingTimeStamp);
+        }
     }
 }
