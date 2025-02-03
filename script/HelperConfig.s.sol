@@ -135,7 +135,7 @@ contract HelperConfig is CodeConstants, Script {
             gasLane: 0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c, // doesn't really matter
             automationUpdateInterval: 30, // 30 seconds
             raffleEntranceFee: 0.01 ether,
-            callbackGasLimit: 500000, // 500,000 gas
+            callbackGasLimit: 800000, // 500,000 gas
             vrfCoordinatorV2_5: address(vrfCoordinatorV2_5Mock),
             link: address(link),
             account: FOUNDRY_DEFAULT_SENDER
