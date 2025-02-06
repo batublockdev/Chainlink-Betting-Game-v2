@@ -36,12 +36,14 @@ contract HigherOrLowerTest is Test, CodeConstants {
     address public PLAYER3 = makeAddr("player3");
     address public PLAYER4 = makeAddr("player4");
     address public PLAYER5 = makeAddr("player5");
+    address public PLAYER6 = makeAddr("player6");
 
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
     uint256 public constant LINK_BALANCE = 4000 ether;
 
     function setUp() external {
         DeployHigherOrLower deployer = new DeployHigherOrLower();
+
         (higherOrLower, helperConfig) = deployer.run();
         vm.deal(PLAYER, 3 ether);
         vm.deal(PLAYER2, 20 ether);
@@ -430,14 +432,22 @@ contract HigherOrLowerTest is Test, CodeConstants {
         vm.deal(PLAYER5, 18 ether);
         vm.prank(PLAYER5);
         higherOrLower.invest{value: 15 ether}();
+        vm.deal(PLAYER6, 15 ether);
+        vm.prank(PLAYER6);
+        higherOrLower.invest{value: 5 ether}();
 
-        vm.deal(XPLAYERX, 18 ether);
+        vm.deal(XPLAYERX, 90 ether);
 
-        for (uint256 i = 0; i < 30; i++) {
+        for (uint256 i = 0; i < 50; i++) {
             vm.warp(block.timestamp + automationUpdateInterval + 1);
             vm.roll(block.number + 1);
 
             console2.log("Bet state: ", higherOrLower.getBet_State());
+            vm.prank(PLAYER6);
+            console2.log(
+                "Balance owner 6 final ",
+                higherOrLower.getOwnerBalance()
+            );
 
             vm.prank(XPLAYERX);
             uint256 xbetAmountX = higherOrLower.getMaxtoBet();
@@ -500,6 +510,13 @@ contract HigherOrLowerTest is Test, CodeConstants {
 
             vm.prank(PLAYER5);
             console2.log("Balance owner 5 ", higherOrLower.getOwnerBalance());
+            vm.prank(PLAYER6);
+            console2.log("Balance owner 6 ", higherOrLower.getOwnerBalance());
+
+            console2.log(
+                "Balance CEO ",
+                higherOrLower.getCEOWithdrawalAmount()
+            );
 
             console2.log("Max to Bet", higherOrLower.getMaxtoBet());
         }
