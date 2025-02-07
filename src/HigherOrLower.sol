@@ -44,6 +44,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     error HigherOrLower_BalanceIs0_Or_AddressIsnotValid();
     error HigherOrLower_NotEnoughFundsToWithdraw();
     error HigherOrLower_NotCEO();
+    error HigherOrLower_OwnersMaximum_Completed();
     error HigherOrLower_UpkeepNotNeeded(
         uint256 currentBalance,
         address player,
@@ -86,7 +87,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     Bet private s_bet;
     uint256 private s_betAmount;
     Bet_State private s_betState;
-    uint256 private s_min_amount_owners;
+    uint256 private s_min_amount_owners = 1 ether;
     uint256 private s_MaxBet;
     /**
      * @dev To start the game the contract denominated the number 3 as the first card
@@ -123,6 +124,18 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         s_CEO = payable(msg.sender);
     }
 
+    function setMaxBet() public {
+        if (s_min_amount_owners < 1 ether) {
+            s_MaxBet = s_min_amount_owners * s_owners_length;
+            s_betState = Bet_State.OPEN;
+            emit State_Bet(uint256(s_betState));
+        } else {
+            s_MaxBet = MIN_BET * s_owners_length;
+            s_betState = Bet_State.OPEN;
+            emit State_Bet(uint256(s_betState));
+        }
+    }
+
     function invest() public payable {
         if (
             s_betState == Bet_State.CALCULATING ||
@@ -133,7 +146,9 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (msg.value < INVEST_AMOUNT) {
             revert HigherOrLower_IncorrectInvestmentAmount();
         }
-        s_owners_length = s_owners.length;
+        if (s_owners.length > 4) {
+            revert HigherOrLower_OwnersMaximum_Completed();
+        }
         bool exist = false;
         for (uint256 x = 0; x < s_owners_length; x++) {
             if (s_owners[x] == payable(msg.sender)) {
@@ -144,17 +159,9 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (!exist) {
             s_owners.push(payable(msg.sender));
         }
-        if (s_min_amount_owners < 1 ether) {
-            s_MaxBet = s_min_amount_owners * s_owners_length;
-            s_betState = Bet_State.OPEN;
-        } else {
-            s_MaxBet = MIN_BET * s_owners_length;
-            s_betState = Bet_State.OPEN;
-        }
-
+        s_owners_length = s_owners.length;
+        setMaxBet();
         owners_balances[msg.sender] += msg.value;
-        s_betState = Bet_State.OPEN;
-        emit State_Bet(uint256(s_betState));
     }
 
     function bet(uint256 bet_player) public payable Game_State {
@@ -294,6 +301,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         s_owners_length = s_owners.length;
         bool s_zero = false;
         uint256 amount_to_pay = s_betAmount / s_owners_length;
+        s_min_amount_owners = 1 ether;
         for (uint256 i = 0; i < s_owners_length; i++) {
             if (s_zero == true) {
                 i = 0;
@@ -339,15 +347,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
                 if (s_min_amount_owners > owners_balances[s_owners[i]]) {
                     s_min_amount_owners = owners_balances[s_owners[i]];
                 }
-                if (s_min_amount_owners < 1 ether) {
-                    s_MaxBet = s_min_amount_owners * s_owners_length;
-                    s_betState = Bet_State.OPEN;
-                    emit State_Bet(uint256(s_betState));
-                } else {
-                    s_MaxBet = MIN_BET * s_owners_length;
-                    s_betState = Bet_State.OPEN;
-                    emit State_Bet(uint256(s_betState));
-                }
+                setMaxBet();
             }
         }
     }
@@ -356,7 +356,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (msg.sender != s_CEO) {
             revert HigherOrLower_NotCEO();
         }
-        if (owners_balances[msg.sender] < amount_toWithdraw) {
+        if (s_CEO_withdrawalAmount < amount_toWithdraw) {
             revert HigherOrLower_NotEnoughFundsToWithdraw();
         }
 
@@ -388,15 +388,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             }
             owners_balances[s_owners[i]] += amount_to_pay_owner;
         }
-        if (s_min_amount_owners < 1 ether) {
-            s_MaxBet = s_min_amount_owners * s_owners_length;
-            s_betState = Bet_State.OPEN;
-            emit State_Bet(uint256(s_betState));
-        } else {
-            s_MaxBet = MIN_BET * s_owners_length;
-            s_betState = Bet_State.OPEN;
-            emit State_Bet(uint256(s_betState));
-        }
+        setMaxBet();
     }
 
     function OwnerWithdraw(uint256 amount_toWithdraw) public Game_State {
