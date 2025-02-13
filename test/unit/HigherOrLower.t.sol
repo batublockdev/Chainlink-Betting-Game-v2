@@ -591,6 +591,114 @@ contract HigherOrLowerTest is Test, CodeConstants {
         address PLAYER_CEO = higherOrLower.getCEO();
         vm.deal(PLAYER3, 18 ether);
         vm.prank(PLAYER3);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 5 ether}();
+        vm.prank(PLAYER4);
+        higherOrLower.invest{value: 5 ether}();
+        vm.deal(PLAYER5, 18 ether);
+        vm.prank(PLAYER5);
+        higherOrLower.invest{value: 5 ether}();
+        vm.deal(PLAYER6, 15 ether);
+        vm.prank(PLAYER6);
+        higherOrLower.invest{value: 5 ether}();
+
+        vm.deal(XPLAYERX, 90 ether);
+
+        for (uint256 i = 0; i < 50; i++) {
+            vm.warp(block.timestamp + automationUpdateInterval + 1);
+            vm.roll(block.number + 1);
+
+            console2.log("Bet state: ", higherOrLower.getBet_State());
+            vm.prank(PLAYER6);
+            console2.log(
+                "Balance owner 6 final ",
+                higherOrLower.getOwnerBalance()
+            );
+
+            vm.prank(XPLAYERX);
+            uint256 xbetAmountX = higherOrLower.getMaxtoBet();
+            vm.prank(XPLAYERX);
+            higherOrLower.bet{value: xbetAmountX}(0);
+
+            uint256 previousCard = higherOrLower.getPreviousCard();
+            uint256 bet = higherOrLower.getBet();
+
+            // Act
+            vm.recordLogs();
+            higherOrLower.performUpkeep(""); // emits requestId
+            Vm.Log[] memory entries = vm.getRecordedLogs();
+            console2.logBytes32(entries[2].topics[1]);
+            bytes32 requestId = entries[2].topics[1]; // get the requestId from the logs
+
+            VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fulfillRandomWords(
+                uint256(requestId),
+                address(higherOrLower)
+            );
+
+            // Assert
+            uint256 newCard = higherOrLower.getPreviousCard();
+            bool betWin = false;
+
+            if (previousCard > newCard) {
+                if (bet == 0) {
+                    betWin = true;
+                } else {
+                    betWin = false;
+                }
+            }
+            if (previousCard == newCard) {
+                if (bet == 1) {
+                    betWin = true;
+                } else {
+                    betWin = false;
+                }
+            }
+            if (previousCard < newCard) {
+                if (bet == 2) {
+                    betWin = true;
+                } else {
+                    betWin = false;
+                }
+            }
+
+            if (betWin) {} else {}
+            console2.log("Bet #", i);
+
+            console2.log("Balance player", XPLAYERX.balance);
+            vm.prank(PLAYER2);
+            console2.log("Balance owner 2", higherOrLower.getOwnerBalance());
+
+            vm.prank(PLAYER3);
+            console2.log("Balance owner 3", higherOrLower.getOwnerBalance());
+
+            vm.prank(PLAYER4);
+            console2.log("Balance owner 4 ", higherOrLower.getOwnerBalance());
+
+            vm.prank(PLAYER5);
+            console2.log("Balance owner 5 ", higherOrLower.getOwnerBalance());
+            vm.prank(PLAYER6);
+            console2.log("Balance owner 6 ", higherOrLower.getOwnerBalance());
+            vm.prank(PLAYER_CEO);
+
+            console2.log(
+                "Balance CEO ",
+                higherOrLower.getCEOWithdrawalAmount()
+            );
+
+            console2.log("Max to Bet", higherOrLower.getMaxtoBet());
+            if (higherOrLower.getBet_State() == 1) {
+                break;
+            }
+        }
+        console2.log("Balance Contract", higherOrLower.getBalance());
+    }
+
+    function testXMoreMoney() public skipFork {
+        // Arrange
+        address PLAYER_CEO = higherOrLower.getCEO();
+        vm.deal(PLAYER3, 18 ether);
+        vm.prank(PLAYER3);
         higherOrLower.invest{value: 9 ether}();
         vm.prank(PLAYER2);
         higherOrLower.invest{value: 5 ether}();
