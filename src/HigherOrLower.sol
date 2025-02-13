@@ -30,7 +30,7 @@ import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/inter
 /**
  * @title HigherOrLower betting game
  * @author Batu block dev
- * @notice This is a contract for a simple betting game where the player bets on whether 
+ * @notice This is a contract for a simple betting game where the player bets on whether
  * the next card drawn from a deck will be higher, equal or lower than the previous card.
  * @dev This contract (Impelements Chainlink VRF)
  */
@@ -76,6 +76,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
 
     // Game Variables
     address payable public s_CEO;
+    uint256 private s_total_Amount_Invested;
     uint256 private s_CEO_withdrawalAmount;
     uint256 private immutable i_interval;
     uint256 private immutable i_entranceFee;
@@ -129,8 +130,9 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         s_min_amount_owners = INVEST_AMOUNT;
         s_CEO = payable(msg.sender);
     }
+
     /**
-     * @dev This funtion is used to set the maximum bet amount, taking into account 
+     * @dev This funtion is used to set the maximum bet amount, taking into account
      * the minimum amount invested by the owners.
      */
     function setMaxBet() public {
@@ -144,6 +146,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             emit State_Bet(uint256(s_betState));
         }
     }
+
     /**
      * @dev This function is used to invest in the game. The player must invest a minimum
      * amount of 5 ether to participate in the game, the maximun investors in the game is 5
@@ -169,6 +172,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         }
         setMaxBet();
         owners_balances[msg.sender] += msg.value;
+        s_total_Amount_Invested += msg.value;
     }
 
     /**
@@ -318,17 +322,23 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             "Withdrawal failed: call to player was unsuccessful"
         );
     }
+
     /**
      * @dev This function is used to subtract the amount to the owners equally.
-     * and set the maximun amount to bet in the next game.
+     * and set the maximun amount to bet in the next game iin the same way it cheks
+     * if the owner balance is enough to play other round otherwise this owner is out the game.
      */
     function PayBet() internal {
         s_owners_length = s_owners.length;
         uint256 amount_to_pay = s_betAmount / s_owners_length;
-    s_min_amount_owners = MIN_BET;
+        s_total_Amount_Invested -= s_betAmount;
+        uint256 index = 0;
+        s_min_amount_owners = MIN_BET;
         uint256 i = 0;
         while (i < s_owners_length) {
-            owners_balances[s_owners[i]] -= amount_to_pay;
+            if (i == index || i > index) {
+                owners_balances[s_owners[i]] -= amount_to_pay;
+            }
             if ((owners_balances[s_owners[i]] * s_owners_length) < MIN_BET) {
                 if (s_owners_length == 1) {
                     s_owners.pop();
@@ -337,6 +347,9 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
                     emit State_Bet(uint256(s_betState));
                     break;
                 } else {
+                    if (s_min_amount_owners == owners_balances[s_owners[i]]) {
+                        s_min_amount_owners = MIN_BET;
+                    }
                     for (uint256 x = i; x < s_owners_length - 1; x++) {
                         s_owners[x] = s_owners[x + 1];
                     }
@@ -344,7 +357,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
                     s_owners_length = s_owners.length;
                     s_MaxBet = MIN_BET * s_owners_length;
                     if (i != 0) {
-                        i--;
+                        index = i;
+                        i = 0;
                     }
                 }
             } else {
@@ -356,6 +370,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             }
         }
     }
+
     /**
      * @dev This function is used to withdraw the CEO funds from the contract who earns 10%
      * of each bet won by the contract.
@@ -387,14 +402,12 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
          */
 
         s_CEO_withdrawalAmount += (10 * s_betAmount) / 100;
-        uint256 total_Amount_Invested = address(this).balance -
-            (s_betAmount + s_CEO_withdrawalAmount);
         s_betAmount -= (10 * s_betAmount) / 100;
         s_owners_length = s_owners.length;
 
         for (uint256 i = 0; i < s_owners_length; i++) {
             uint256 s_percentage = (owners_balances[s_owners[i]] * 100) /
-                (total_Amount_Invested);
+                (s_total_Amount_Invested);
             uint256 amount_to_pay_owner = (s_percentage * (s_betAmount)) / 100;
 
             if (owners_balances[s_owners[i]] == s_min_amount_owners) {
@@ -402,11 +415,12 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             }
             owners_balances[s_owners[i]] += amount_to_pay_owner;
         }
+        s_total_Amount_Invested += s_betAmount;
         setMaxBet();
     }
 
     /**
-     * @dev This function is used to withdraw the amount by the owners 
+     * @dev This function is used to withdraw the amount by the owners
      * who must keep in the contract at least 1 ether to play a round .
      */
     function OwnerWithdraw(uint256 amount_toWithdraw) public Game_State {

@@ -591,7 +591,7 @@ contract HigherOrLowerTest is Test, CodeConstants {
         address PLAYER_CEO = higherOrLower.getCEO();
         vm.deal(PLAYER3, 18 ether);
         vm.prank(PLAYER3);
-        higherOrLower.invest{value: 5 ether}();
+        higherOrLower.invest{value: 9 ether}();
         vm.prank(PLAYER2);
         higherOrLower.invest{value: 5 ether}();
         vm.prank(PLAYER4);
@@ -601,7 +601,7 @@ contract HigherOrLowerTest is Test, CodeConstants {
         higherOrLower.invest{value: 5 ether}();
         vm.deal(PLAYER6, 15 ether);
         vm.prank(PLAYER6);
-        higherOrLower.invest{value: 5 ether}();
+        higherOrLower.invest{value: 15 ether}();
 
         vm.deal(XPLAYERX, 90 ether);
 
@@ -959,4 +959,92 @@ contract HigherOrLowerTest is Test, CodeConstants {
             }
         }
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                 SUBTRATION TEST
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @dev This test only work if you comment the following in the contract
+     * 
+     *   /* if (msg.value < INVEST_AMOUNT) {
+            revert HigherOrLower_IncorrectInvestmentAmount();
+        }*/
+
+    /*if (msg.value < MIN_BET) {
+            revert HigherOrLower_NotEnoughFundsToBet();
+        }
+        if (msg.value > s_MaxBet) {
+            revert HigherOrLower_TooMuchFundsToBet();
+        }
+     */
+
+    /*function testXGamePay() public skipFork {
+        // Arrange
+        vm.prank(PLAYER2);
+        higherOrLower.invest{value: 0.8 ether}();
+        vm.prank(PLAYER3);
+        higherOrLower.invest{value: 0.5 ether}();
+        vm.prank(PLAYER4);
+        higherOrLower.invest{value: 1.1 ether}();
+        vm.prank(PLAYER5);
+        higherOrLower.invest{value: 0.5 ether}();
+        vm.prank(PLAYER6);
+        higherOrLower.invest{value: 2 ether}();
+        address PLAYER_CEO = higherOrLower.getCEO();
+
+        vm.deal(XPLAYERX, 90 ether);
+
+        vm.warp(block.timestamp + automationUpdateInterval + 1);
+        vm.roll(block.number + 1);
+
+        vm.prank(PLAYER6);
+
+        uint256 xbetAmountX = higherOrLower.getMaxtoBet();
+        vm.prank(XPLAYERX);
+        higherOrLower.bet{value: 2.5 ether}(0);
+
+        uint256 previousCard = higherOrLower.getPreviousCard();
+        uint256 bet = higherOrLower.getBet();
+
+        // Act
+        vm.recordLogs();
+        higherOrLower.performUpkeep(""); // emits requestId
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        console2.logBytes32(entries[2].topics[1]);
+        bytes32 requestId = entries[2].topics[1]; // get the requestId from the logs
+
+        VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fulfillRandomWords(
+            uint256(requestId),
+            address(higherOrLower)
+        );
+
+        // Assert
+
+        console2.log("Balance Game", higherOrLower.getBalance());
+
+        console2.log("Balance player", XPLAYERX.balance);
+        vm.prank(PLAYER2);
+        console2.log("Balance owner 2", higherOrLower.getOwnerBalance());
+
+        vm.prank(PLAYER3);
+        console2.log("Balance owner 3", higherOrLower.getOwnerBalance());
+
+        vm.prank(PLAYER4);
+        console2.log("Balance owner 4 ", higherOrLower.getOwnerBalance());
+
+        vm.prank(PLAYER5);
+        console2.log("Balance owner 5 ", higherOrLower.getOwnerBalance());
+        vm.prank(PLAYER6);
+        console2.log("Balance owner 6 ", higherOrLower.getOwnerBalance());
+        vm.prank(PLAYER_CEO);
+
+        console2.log("Balance CEO ", higherOrLower.getCEOWithdrawalAmount());
+
+        console2.log("Max to Bet", higherOrLower.getMaxtoBet());
+        console2.log("Bet state: ", higherOrLower.getBet_State());
+        if (higherOrLower.getBet_State() == 1) {
+            console2.log("--------------CLOSED-----------");
+        }
+    }*/
 }
