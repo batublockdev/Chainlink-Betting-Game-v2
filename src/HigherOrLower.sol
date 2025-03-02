@@ -1,24 +1,3 @@
-// Layout of Contract:
-// version
-// imports
-// errors
-// interfaces, libraries, contracts
-// Type declarations
-// State variables
-// Events
-// Modifiers
-// Functions
-
-// Layout of Functions:
-// constructor
-// receive function (if exists)
-// fallback function (if exists)
-// external
-// public
-// internal
-// private
-// view & pure functions
-
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
@@ -80,8 +59,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     uint256 private s_CEO_withdrawalAmount;
     uint256 private immutable i_interval;
     uint256 private immutable i_entranceFee;
-    uint256 private constant INVEST_AMOUNT = 5 ether;
-    uint256 private constant MIN_BET = 1 ether;
+    uint256 private constant INVEST_AMOUNT = 1 ether;
+    uint256 private constant MIN_BET = 0.5 ether;
     uint256 private s_lastTimeStamp;
     address payable private s_player;
     address payable[] private s_owners;
@@ -445,9 +424,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (owners_balances[msg.sender] == 0) {
             amount = 0;
         }
-
         amount = owners_balances[msg.sender];
-
         return amount;
     }
 
