@@ -1,3 +1,4 @@
+
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.19;
@@ -11,6 +12,7 @@ import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VR
 import {LinkToken} from "../../test/mocks/LinkToken.sol";
 import {CodeConstants} from "../../script/HelperConfig.s.sol";
 import {Script} from "forge-std/Script.sol";
+import {Helper} from "../../src/helper.sol";
 import {AddConsumer, CreateSubscription, FundSubscription} from "../../script/Interactions.s.sol";
 
 contract HigherOrLowerTest is Test, CodeConstants {
@@ -23,6 +25,7 @@ contract HigherOrLowerTest is Test, CodeConstants {
 
     HigherOrLower public higherOrLower;
     HelperConfig public helperConfig;
+    Helper public helper;
 
     uint256 subscriptionId;
     bytes32 gasLane;
@@ -41,12 +44,14 @@ contract HigherOrLowerTest is Test, CodeConstants {
     address public PLAYER6 = makeAddr("player6");
 
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
+    uint256 public constant AMOUNT_BET = 10 ether;
+
     uint256 public constant LINK_BALANCE = 4000 ether;
 
     function setUp() external {
         DeployHigherOrLower deployer = new DeployHigherOrLower();
 
-        (higherOrLower, helperConfig) = deployer.run();
+        (higherOrLower, helperConfig, , ) = deployer.run();
         vm.deal(PLAYER, STARTING_USER_BALANCE);
         vm.deal(PLAYER2, STARTING_USER_BALANCE);
         vm.deal(PLAYER3, STARTING_USER_BALANCE);
@@ -54,6 +59,7 @@ contract HigherOrLowerTest is Test, CodeConstants {
         vm.deal(PLAYER5, STARTING_USER_BALANCE);
         vm.deal(PLAYER6, STARTING_USER_BALANCE);
 
+        helper = new Helper(address(helperConfig));
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
         subscriptionId = config.subscriptionId;
         gasLane = config.gasLane;
@@ -75,7 +81,8 @@ contract HigherOrLowerTest is Test, CodeConstants {
         vm.stopPrank();
     }
 
-    /*//////////////////////////////////////////////////////////////
+   
+ /*//////////////////////////////////////////////////////////////
                                  TEST GAME
     //////////////////////////////////////////////////////////////*/
 
@@ -605,7 +612,7 @@ contract HigherOrLowerTest is Test, CodeConstants {
 
         vm.deal(XPLAYERX, 90 ether);
 
-        for (uint256 i = 0; i < 50; i++) {
+        for (uint256 i = 0; i < 10; i++) {
             vm.warp(block.timestamp + automationUpdateInterval + 1);
             vm.roll(block.number + 1);
 
@@ -1156,3 +1163,4 @@ contract HigherOrLowerTest is Test, CodeConstants {
         }
     }*/
 }
+

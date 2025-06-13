@@ -1,0 +1,51 @@
+forge script script/DeployHigherOrLower.s.sol:DeployHigherOrLower --rpc-url http://127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --broadcast 
+
+info:
+
+== Return ==
+0: contract HigherOrLower 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+1: contract HelperConfig 0xC7f2Cf4845C6db0e1a1e91ED41Bcd0FcC1b0E141
+link: address 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+subcriptionId: uint256 25448741962226539893443353960832642176869692365643085071536008624333042404249 [2.544e76]
+
+== Logs ==
+  ⚠️ You have deployed a mock conract!
+  Make sure this was intentional
+  Adding consumer contract:  0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+  Using vrfCoordinator:  0x5FbDB2315678afecb367f032d93F642f64180aa3
+
+mint:
+cast send 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 "mint(address,uint256)" 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 100000000000000000000 --rpc-url http://127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 
+
+Fund Supcrition
+cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 "fundSubscription(uint256,uint256)" 25448741962226539893443353960832642176869692365643085071536008624333042404249 100000000000000000000 --rpc-url http://127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 
+
+Preform
+
+cast send 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 "performUpkeep(bytes)" 0x  --rpc-url http://127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 
+
+cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 "fulfillRandomWords(uint256,address)" 0x0000000000000000000000000000000000000000000000000000000000000006 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9  --rpc-url http://127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 
+
+Invest
+
+ cast send 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 "invest()" --rpc-url http://127.0.0.1:8545 --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d --value 5ether
+
+Bet
+
+ cast send 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 "bet(uint256)" 1 --rpc-url http://127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --value 1ether
+
+cast rpc evm_increaseTime 36000 --rpc-url http://127.0.0.1:8545
+cast rpc evm_mine --rpc-url http://127.0.0.1:8545
+
+
+logs
+
+cast logs --from-block 0 --to-block latest --address 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9 "RequestedRaffleWinner(uint256)" --rpc-url http://127.0.0.1:8545
+
+calls
+cast call 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 "getPreviousCard() returns (uint256)" --rpc-url http://127.0.0.1:8545
+
+
+
+
+

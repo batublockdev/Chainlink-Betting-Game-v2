@@ -5,6 +5,7 @@ pragma solidity 0.8.19;
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
+import {Coin} from "./Coin.sol"; // Importing the Coin contract
 
 /**
  * @title HigherOrLower betting game
@@ -25,12 +26,9 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     error HigherOrLower_NotEnoughFundsToWithdraw();
     error HigherOrLower_NotCEO();
     error HigherOrLower_OwnersMaximum_Completed();
-    error HigherOrLower_UpkeepNotNeeded(
-        uint256 currentBalance,
-        address player,
-        uint256 bet_State
-    );
-
+    error HigherOrLower_UpkeepNotNeeded(uint256 bet_State);
+    error HigherOrLower_PlayersMaximum_Completed();
+    error HigherOrLower_TransferFailed();
     /* Type declarations */
     enum Bet {
         LOW,
@@ -43,6 +41,16 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         CALCULATING,
         ONGAME
     }
+    enum Bet_Result {
+        WIN,
+        LOST
+    }
+
+    struct Bet_OnGameData {
+        address player;
+        uint256 betAmount;
+        Bet bet;
+    }
 
     /* State variables */
     // Chainlink VRF Variables
@@ -52,28 +60,29 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
     uint32 private constant NUM_WORDS = 1;
     mapping(address => uint) owners_balances;
+    mapping(uint => Bet_OnGameData) players_bet;
 
     // Game Variables
-    address payable public s_CEO;
+    address public s_CEO;
     uint256 private s_total_Amount_Invested;
+    uint256 private s_total_Amount_Bet;
     uint256 private s_CEO_withdrawalAmount;
     uint256 private immutable i_interval;
     uint256 private immutable i_entranceFee;
-    uint256 private constant INVEST_AMOUNT = 1 ether;
-    uint256 private constant MIN_BET = 0.5 ether;
+    uint256 private constant INVEST_AMOUNT = 50 ether;
+    uint256 private constant MIN_BET = 5 ether;
     uint256 private s_lastTimeStamp;
-    address payable private s_player;
-    address payable[] private s_owners;
+    address[] private s_owners;
     uint256 private s_owners_length;
-    Bet private s_bet;
-    uint256 private s_betAmount;
     Bet_State private s_betState;
     uint256 private s_min_amount_owners = MIN_BET;
     uint256 private s_MaxBet;
+    uint256 private s_index_Players;
+    Coin immutable i_Coin; // Instance of the Coin contract
     /**
      * @dev To start the game the contract denominated the number 3 as the first card
      */
-    uint256 private s_previousCard = 3;
+    uint256 private s_previousCard;
 
     modifier Game_State() {
         if (
@@ -87,7 +96,13 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
 
     /* Events */
     event RequestedRaffleWinner(uint256 indexed requestId);
+    event BetHistory(
+        address indexed player,
+        uint256 indexed result,
+        uint256 indexed amount
+    );
     event State_Bet(uint256 indexed betState);
+    event Max_Bet(uint256 indexed MaxBet);
     event CurrentCard(uint256 indexed card);
 
     constructor(
@@ -96,7 +111,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         uint256 interval,
         uint256 entranceFee,
         uint32 callbackGasLimit,
-        address vrfCoordinatorV2
+        address vrfCoordinatorV2,
+        address _Coin
     ) VRFConsumerBaseV2Plus(vrfCoordinatorV2) {
         i_subscriptionId = subscriptionId;
         i_gasLane = gasLane;
@@ -105,9 +121,11 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         i_entranceFee = entranceFee;
         s_lastTimeStamp = block.timestamp;
         s_betState = Bet_State.CLOSED;
-        s_bet = Bet.HIGH; // or any default state
-        s_min_amount_owners = INVEST_AMOUNT;
-        s_CEO = payable(msg.sender);
+        s_min_amount_owners = MIN_BET;
+        s_CEO = msg.sender;
+        i_Coin = Coin(_Coin);
+        s_previousCard = 3; // Starting card
+        s_index_Players = 0;
     }
 
     /**
@@ -119,20 +137,27 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             s_MaxBet = s_min_amount_owners * s_owners_length;
             s_betState = Bet_State.OPEN;
             emit State_Bet(uint256(s_betState));
+            emit Max_Bet(s_MaxBet);
         } else {
             s_MaxBet = MIN_BET * s_owners_length;
             s_betState = Bet_State.OPEN;
             emit State_Bet(uint256(s_betState));
+            emit Max_Bet(s_MaxBet);
         }
     }
 
     /**
      * @dev This function is used to invest in the game. The player must invest a minimum
-     * amount of 5 ether to participate in the game, the maximun investors in the game is 5
+     * amount of 50 tokens to participate in the game, the maximun investors in the game is 5
      */
     function invest() public payable Game_State {
-        if (msg.value < INVEST_AMOUNT) {
-            revert HigherOrLower_IncorrectInvestmentAmount();
+        bool sucess = i_Coin.transferFrom(
+            msg.sender,
+            address(this),
+            INVEST_AMOUNT
+        );
+        if (!sucess) {
+            revert HigherOrLower_TransferFailed();
         }
         if (s_owners.length > 4) {
             revert HigherOrLower_OwnersMaximum_Completed();
@@ -140,42 +165,59 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         bool exist = false;
         s_owners_length = s_owners.length;
         for (uint256 x = 0; x < s_owners_length; x++) {
-            if (s_owners[x] == payable(msg.sender)) {
+            if (s_owners[x] == msg.sender) {
                 exist = true;
                 break;
             }
         }
         if (!exist) {
-            s_owners.push(payable(msg.sender));
+            s_owners.push(msg.sender);
             s_owners_length = s_owners.length;
         }
         setMaxBet();
-        owners_balances[msg.sender] += msg.value;
-        s_total_Amount_Invested += msg.value;
+        owners_balances[msg.sender] += INVEST_AMOUNT;
+        s_total_Amount_Invested += INVEST_AMOUNT;
     }
 
     /**
      * @dev This function is used to bet on the next card drawn from the deck.
      */
-    function bet(uint256 bet_player) public payable {
-        if (s_betState != Bet_State.OPEN) {
+    function bet(uint256 bet_player, uint256 _bet_amount) public payable {
+        if (
+            s_betState == Bet_State.CALCULATING ||
+            s_betState == Bet_State.CLOSED
+        ) {
             revert HigherOrLower_GAME_NOT_OPEN();
         }
-
-        if (msg.value < MIN_BET) {
+        if (_bet_amount < MIN_BET) {
             revert HigherOrLower_NotEnoughFundsToBet();
         }
-        if (msg.value > s_MaxBet) {
+        if (_bet_amount > s_MaxBet) {
             revert HigherOrLower_TooMuchFundsToBet();
         }
         if (bet_player < 0 || bet_player > 2) {
             revert HigherOrLower_IncorrectBet();
         }
+        bool sucess = i_Coin.transferFrom(
+            msg.sender,
+            address(this),
+            _bet_amount
+        );
+        if (!sucess) {
+            revert HigherOrLower_TransferFailed();
+        }
         s_betState = Bet_State.ONGAME;
+        players_bet[s_index_Players] = Bet_OnGameData(
+            msg.sender,
+            _bet_amount,
+            Bet(bet_player)
+        );
+        s_index_Players++;
+        s_total_Amount_Bet += _bet_amount;
+        if (s_index_Players > 4 || s_total_Amount_Bet > s_MaxBet) {
+            s_betState = Bet_State.CALCULATING;
+        }
         emit State_Bet(uint256(s_betState));
-        s_bet = Bet(bet_player);
-        s_player = payable(msg.sender);
-        s_betAmount = msg.value;
     }
 
     function checkUpkeep(
@@ -189,9 +231,8 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         bool isOpen = Bet_State.ONGAME == s_betState ||
             Bet_State.CALCULATING == s_betState;
         bool timePassed = ((block.timestamp - s_lastTimeStamp) > i_interval);
-        bool hasPlayers = s_player != address(0);
-        bool hasBalance = address(this).balance > 0;
-        upkeepNeeded = (timePassed && isOpen && hasBalance && hasPlayers);
+        bool hasBalance = i_Coin.balanceOf(address(this)) > 0;
+        upkeepNeeded = (timePassed && isOpen && hasBalance);
         return (upkeepNeeded, "0x0"); // can we comment this out?
     }
 
@@ -203,11 +244,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         (bool upkeepNeeded, ) = checkUpkeep("");
         // require(upkeepNeeded, "Upkeep not needed");
         if (!upkeepNeeded) {
-            revert HigherOrLower_UpkeepNotNeeded(
-                address(this).balance,
-                s_player,
-                uint256(s_betState)
-            );
+            revert HigherOrLower_UpkeepNotNeeded(uint256(s_betState));
         }
 
         s_betState = Bet_State.CALCULATING;
@@ -250,56 +287,78 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
          * the player must bet if the next card will be higher, equal or lower than the previous card.
          * If the player wins the bet, the amount is doubled and returned to the player.
          */
+        uint256 resultBet = 0;
         if (number_card > s_previousCard) {
-            if (s_bet == Bet.HIGH) {
-                PayBet();
-                WinnerWithdraw();
-            } else {
-                GetBetOwner();
-            }
+            resultBet = 2; // Higher
         } else if (number_card == s_previousCard) {
-            if (s_bet == Bet.EQUAL) {
-                PayBet();
-                WinnerWithdraw();
-            } else {
-                GetBetOwner();
-            }
+            resultBet = 1; // EQUAL
         } else {
-            if (s_bet == Bet.LOW) {
-                PayBet();
-                WinnerWithdraw();
-            } else {
-                GetBetOwner();
-            }
+            resultBet = 0; // LOW
         }
+        Bet_OnGameData[] memory winners = new Bet_OnGameData[](s_index_Players);
+        uint8 indexwinners = 0;
+        uint256 amountTopay = 0;
+        uint256 amountToOwners = 0;
+
+        for (uint256 i = 0; i < s_index_Players; i++) {
+            if (players_bet[i].bet == Bet(resultBet)) {
+                winners[indexwinners] = players_bet[i];
+                indexwinners++;
+                amountTopay += players_bet[i].betAmount;
+            } else {
+                amountToOwners += players_bet[i].betAmount;
+                emit BetHistory(
+                    players_bet[i].player,
+                    uint256(Bet_Result.LOST),
+                    players_bet[i].betAmount
+                );
+            }
+            delete players_bet[i]; // Reset the player bet data
+        }
+        if (indexwinners != 0) {
+            PayBet(amountTopay);
+            WinnerWithdraw(winners, indexwinners);
+        }
+
+        if (amountToOwners != 0) {
+            GetBetOwner(amountToOwners);
+        }
+
         s_previousCard = number_card;
+        s_index_Players = 0;
+        s_total_Amount_Bet = 0;
         emit CurrentCard(number_card);
-        s_player = payable(address(0));
         s_lastTimeStamp = block.timestamp;
     }
 
     /**
      * @dev This function is used to transfer the winnings to the player.
      */
-    function WinnerWithdraw() internal {
-        require(s_betAmount <= type(uint256).max / 2, "Bet amount too large");
+    function WinnerWithdraw(
+        Bet_OnGameData[] memory data,
+        uint8 length
+    ) internal {
+        uint256 i = 0;
+        while (i < length) {
+            require(
+                data[i].betAmount <= type(uint256).max / 2,
+                "Bet amount too large"
+            );
 
-        uint256 withdrawalAmount = s_betAmount * 2;
+            uint256 withdrawalAmount = data[i].betAmount * 2;
 
-        // Ensure the contract has enough balance
-        require(
-            address(this).balance >= withdrawalAmount,
-            "Insufficient contract balance"
-        );
-
-        // Ensure the multiplication doesn't overflow uint256
-        require(withdrawalAmount >= s_betAmount, "Overflow detected");
-        // Attempt to transfer the winnings
-        (bool callSuccess, ) = s_player.call{value: withdrawalAmount}("");
-        require(
-            callSuccess,
-            "Withdrawal failed: call to player was unsuccessful"
-        );
+            // Attempt to transfer the winnings
+            bool sucess = i_Coin.transfer(data[i].player, withdrawalAmount);
+            if (!sucess) {
+                revert HigherOrLower_TransferFailed();
+            }
+            emit BetHistory(
+                data[i].player,
+                uint256(Bet_Result.WIN),
+                withdrawalAmount
+            );
+            i++;
+        }
     }
 
     /**
@@ -307,10 +366,10 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
      * and set the maximun amount to bet in the next game iin the same way it cheks
      * if the owner balance is enough to play other round otherwise this owner is out the game.
      */
-    function PayBet() internal {
+    function PayBet(uint256 _betAmount) internal {
         s_owners_length = s_owners.length;
-        uint256 amount_to_pay = s_betAmount / s_owners_length;
-        s_total_Amount_Invested -= s_betAmount;
+        uint256 amount_to_pay = _betAmount / s_owners_length;
+        s_total_Amount_Invested -= _betAmount;
         uint256 index = 0;
         s_min_amount_owners = MIN_BET;
         uint256 i = 0;
@@ -362,9 +421,10 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             revert HigherOrLower_NotEnoughFundsToWithdraw();
         }
 
-        (bool callSuccess, ) = s_CEO.call{value: amount_toWithdraw}("");
-        require(callSuccess, "Call failed");
-        if (callSuccess) {
+        bool sucess = i_Coin.transfer(s_CEO, amount_toWithdraw);
+        if (!sucess) {
+            revert HigherOrLower_TransferFailed();
+        } else {
             s_CEO_withdrawalAmount -= amount_toWithdraw;
         }
     }
@@ -373,28 +433,27 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
      * @dev This function is used to distribute the amount to the owners proportionally
      */
 
-    function GetBetOwner() internal {
+    function GetBetOwner(uint256 amountToget) internal {
         /**
          * @dev If the player loses the bet, the amount is distributed to the owners
          * proportionally to the amount they have invested in the game before this round,
          * the CEO earns 10% of the amount lost by the player.
          */
-
-        s_CEO_withdrawalAmount += (10 * s_betAmount) / 100;
-        s_betAmount -= (10 * s_betAmount) / 100;
+        s_CEO_withdrawalAmount += (10 * amountToget) / 100;
+        amountToget -= (10 * amountToget) / 100;
         s_owners_length = s_owners.length;
 
         for (uint256 i = 0; i < s_owners_length; i++) {
             uint256 s_percentage = (owners_balances[s_owners[i]] * 100) /
                 (s_total_Amount_Invested);
-            uint256 amount_to_pay_owner = (s_percentage * (s_betAmount)) / 100;
+            uint256 amount_to_pay_owner = (s_percentage * (amountToget)) / 100;
 
             if (owners_balances[s_owners[i]] == s_min_amount_owners) {
                 s_min_amount_owners += amount_to_pay_owner;
             }
             owners_balances[s_owners[i]] += amount_to_pay_owner;
         }
-        s_total_Amount_Invested += s_betAmount;
+        s_total_Amount_Invested += amountToget;
         setMaxBet();
     }
 
@@ -412,9 +471,10 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (MIN_BET > (owners_balances[msg.sender] - amount_toWithdraw)) {
             revert HigherOrLower_NotEnoughFundsToWithdraw();
         }
-        (bool callSuccess, ) = msg.sender.call{value: amount_toWithdraw}("");
-        require(callSuccess, "Call failed");
-        if (callSuccess) {
+        bool sucess = i_Coin.transfer(msg.sender, amount_toWithdraw);
+        if (!sucess) {
+            revert HigherOrLower_TransferFailed();
+        } else {
             owners_balances[msg.sender] -= amount_toWithdraw;
         }
     }
@@ -423,8 +483,9 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         uint256 amount;
         if (owners_balances[msg.sender] == 0) {
             amount = 0;
+        } else {
+            amount = owners_balances[msg.sender];
         }
-        amount = owners_balances[msg.sender];
         return amount;
     }
 
@@ -432,9 +493,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         return s_previousCard;
     }
 
-    function getOwners(
-        uint256 indexOwners
-    ) external view returns (address payable) {
+    function getOwners(uint256 indexOwners) external view returns (address) {
         return s_owners[indexOwners];
     }
 
@@ -446,27 +505,15 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         return uint256(s_betState);
     }
 
-    function getBet() public view returns (uint256) {
-        return uint256(s_bet);
-    }
-
     function getMaxtoBet() public view returns (uint256) {
         return uint256(s_MaxBet);
-    }
-
-    function getPlayer() public view returns (address) {
-        return s_player;
-    }
-
-    function getBetAmount() public view returns (uint256) {
-        return s_betAmount;
     }
 
     function getLastTimeStamp() public view returns (uint256) {
         return s_lastTimeStamp;
     }
 
-    function getCEO() public view returns (address payable) {
+    function getCEO() public view returns (address) {
         return s_CEO;
     }
 

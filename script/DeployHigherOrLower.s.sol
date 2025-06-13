@@ -7,7 +7,16 @@ import {HigherOrLower} from "../src/HigherOrLower.sol";
 import {AddConsumer, CreateSubscription, FundSubscription} from "./Interactions.s.sol";
 
 contract DeployHigherOrLower is Script {
-    function run() external returns (HigherOrLower, HelperConfig) {
+    function run()
+        external
+        returns (
+            HigherOrLower,
+            HelperConfig,
+            address link,
+            uint256 subcriptionId,
+            address coin
+        )
+    {
         HelperConfig helperConfig = new HelperConfig(); // This comes with our mocks!
         AddConsumer addConsumer = new AddConsumer();
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
@@ -40,7 +49,8 @@ contract DeployHigherOrLower is Script {
             config.automationUpdateInterval,
             config.raffleEntranceFee,
             config.callbackGasLimit,
-            config.vrfCoordinatorV2_5
+            config.vrfCoordinatorV2_5,
+            config.coin
         );
         vm.stopBroadcast();
 
@@ -51,6 +61,12 @@ contract DeployHigherOrLower is Script {
             config.subscriptionId,
             config.account
         );
-        return (raffle, helperConfig);
+        return (
+            raffle,
+            helperConfig,
+            config.link,
+            config.subscriptionId,
+            config.coin
+        );
     }
 }
