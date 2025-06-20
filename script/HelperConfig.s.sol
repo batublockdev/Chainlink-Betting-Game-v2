@@ -14,6 +14,9 @@ abstract contract CodeConstants {
 
     address public constant FOUNDRY_DEFAULT_SENDER =
         0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38;
+    //  Use FOUNDRY_DEFAULT_SENDER in tests
+    address public constant FOUNDRY_SENDER =
+        0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
 
     uint256 public constant ETH_SEPOLIA_CHAIN_ID = 11155111;
     uint256 public constant ETH_MAINNET_CHAIN_ID = 1;
@@ -104,14 +107,14 @@ contract HelperConfig is CodeConstants, Script {
         returns (NetworkConfig memory sepoliaNetworkConfig)
     {
         sepoliaNetworkConfig = NetworkConfig({
-            subscriptionId: 0, // If left as 0, our scripts will create one!
+            subscriptionId: 109327581294890112026464373280241797711147455532665299447617603578782666702895, // If left as 0, our scripts will create one!
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae,
             automationUpdateInterval: 30, // 30 seconds
             raffleEntranceFee: 0.01 ether,
             callbackGasLimit: 500000, // 500,000 gas
             vrfCoordinatorV2_5: 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B,
             link: 0x779877A7B0D9E8603169DdbD7836e478b4624789,
-            account: 0x643315C9Be056cDEA171F4e7b2222a4ddaB9F88D,
+            account: 0x27fe1ac5A0eBD0c969C51B1f040ad704C4aB20A0,
             coin: 0x643315C9Be056cDEA171F4e7b2222a4ddaB9F88D // This is the same as the account for simplicity
         });
     }
@@ -143,7 +146,7 @@ contract HelperConfig is CodeConstants, Script {
             callbackGasLimit: 500000, // 500,000 gas
             vrfCoordinatorV2_5: address(vrfCoordinatorV2_5Mock),
             link: address(link),
-            account: FOUNDRY_DEFAULT_SENDER,
+            account: FOUNDRY_SENDER,
             coin: address(coin)
         });
         vm.deal(localNetworkConfig.account, 100 ether);

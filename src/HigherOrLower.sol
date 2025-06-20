@@ -104,6 +104,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     event State_Bet(uint256 indexed betState);
     event Max_Bet(uint256 indexed MaxBet);
     event CurrentCard(uint256 indexed card);
+    event NewOwner(address indexed owner, uint256 indexed amountInvested);
 
     constructor(
         uint256 subscriptionId,
@@ -139,7 +140,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             emit State_Bet(uint256(s_betState));
             emit Max_Bet(s_MaxBet);
         } else {
-            s_MaxBet = MIN_BET * s_owners_length;
+            s_MaxBet = (MIN_BET * 2) * s_owners_length;
             s_betState = Bet_State.OPEN;
             emit State_Bet(uint256(s_betState));
             emit Max_Bet(s_MaxBet);
@@ -150,7 +151,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
      * @dev This function is used to invest in the game. The player must invest a minimum
      * amount of 50 tokens to participate in the game, the maximun investors in the game is 5
      */
-    function invest() public payable Game_State {
+    function invest() public  Game_State {
         bool sucess = i_Coin.transferFrom(
             msg.sender,
             address(this),
@@ -173,6 +174,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (!exist) {
             s_owners.push(msg.sender);
             s_owners_length = s_owners.length;
+            emit NewOwner(msg.sender, INVEST_AMOUNT);
         }
         setMaxBet();
         owners_balances[msg.sender] += INVEST_AMOUNT;
@@ -214,7 +216,7 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         );
         s_index_Players++;
         s_total_Amount_Bet += _bet_amount;
-        if (s_index_Players > 4 || s_total_Amount_Bet > s_MaxBet) {
+        if (s_index_Players > 4 || s_total_Amount_Bet >= s_MaxBet) {
             s_betState = Bet_State.CALCULATING;
         }
         emit State_Bet(uint256(s_betState));
@@ -495,6 +497,10 @@ contract HigherOrLower is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
 
     function getOwners(uint256 indexOwners) external view returns (address) {
         return s_owners[indexOwners];
+    }
+
+    function getOwnersList() external view returns (address[] memory) {
+        return s_owners;
     }
 
     function getOwners_legth() external view returns (uint256) {

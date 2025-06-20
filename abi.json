@@ -31,6 +31,11 @@
         "name": "vrfCoordinatorV2",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "_Coin",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "nonpayable"
@@ -61,6 +66,11 @@
     "inputs": [
       {
         "name": "bet_player",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_bet_amount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -120,32 +130,6 @@
   },
   {
     "type": "function",
-    "name": "getBet",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getBetAmount",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "getBet_State",
     "inputs": [],
     "outputs": [
@@ -165,7 +149,7 @@
       {
         "name": "",
         "type": "address",
-        "internalType": "address payable"
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -236,7 +220,20 @@
       {
         "name": "",
         "type": "address",
-        "internalType": "address payable"
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getOwnersList",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
     "stateMutability": "view"
@@ -250,19 +247,6 @@
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getPlayer",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -339,7 +323,7 @@
       {
         "name": "",
         "type": "address",
-        "internalType": "address payable"
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -456,6 +440,25 @@
   },
   {
     "type": "event",
+    "name": "NewOwner",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amountInvested",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnershipTransferRequested",
     "inputs": [
       {
@@ -560,23 +563,23 @@
   },
   {
     "type": "error",
+    "name": "HigherOrLower_PlayersMaximum_Completed",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "HigherOrLower_TooMuchFundsToBet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "HigherOrLower_TransferFailed",
     "inputs": []
   },
   {
     "type": "error",
     "name": "HigherOrLower_UpkeepNotNeeded",
     "inputs": [
-      {
-        "name": "currentBalance",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "player",
-        "type": "address",
-        "internalType": "address"
-      },
       {
         "name": "bet_State",
         "type": "uint256",

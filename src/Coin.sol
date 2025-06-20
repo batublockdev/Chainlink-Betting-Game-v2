@@ -11,7 +11,9 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
  * @notice The Coin contract is used in the HigherOrLower project to represent in-game currency.
  */
 contract Coin is ERC20 {
-    constructor() ERC20("CoinGame", "COIN") {}
+    constructor() ERC20("CoinGame", "COIN") {
+        _mint(msg.sender,1000 ether);
+    }
 
     // Helper to mint more tokens in tests
     function mint(address to, uint256 amount) external {

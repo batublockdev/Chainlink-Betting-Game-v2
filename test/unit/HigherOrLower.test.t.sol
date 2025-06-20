@@ -51,7 +51,7 @@ contract HigherOrLowerTest is Test, CodeConstants {
     function setUp() external {
         DeployHigherOrLower deployer = new DeployHigherOrLower();
 
-        (higherOrLower, helperConfig, , ) = deployer.run();
+        (higherOrLower, helperConfig, , , ) = deployer.run();
         vm.deal(PLAYER, STARTING_USER_BALANCE);
         vm.deal(PLAYER2, STARTING_USER_BALANCE);
         vm.deal(PLAYER3, STARTING_USER_BALANCE);
@@ -277,7 +277,7 @@ contract HigherOrLowerTest is Test, CodeConstants {
         vm.prank(PLAYER3);
         higherOrLower.invest();
 
-        for (uint256 i = 0; i < 10; i++) {
+        for (uint256 i = 0; i < 20; i++) {
             vm.warp(block.timestamp + automationUpdateInterval + 1);
             vm.roll(block.number + 1);
 

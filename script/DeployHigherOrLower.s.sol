@@ -4,6 +4,7 @@ pragma solidity ^0.8.19;
 import {Script} from "forge-std/Script.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 import {HigherOrLower} from "../src/HigherOrLower.sol";
+import {Coin} from "../src/Coin.sol";
 import {AddConsumer, CreateSubscription, FundSubscription} from "./Interactions.s.sol";
 
 contract DeployHigherOrLower is Script {
@@ -43,6 +44,7 @@ contract DeployHigherOrLower is Script {
         }
 
         vm.startBroadcast(config.account);
+        Coin coinx = new Coin();
         HigherOrLower raffle = new HigherOrLower(
             config.subscriptionId,
             config.gasLane,
@@ -50,7 +52,7 @@ contract DeployHigherOrLower is Script {
             config.raffleEntranceFee,
             config.callbackGasLimit,
             config.vrfCoordinatorV2_5,
-            config.coin
+            address(coinx)
         );
         vm.stopBroadcast();
 
@@ -66,7 +68,7 @@ contract DeployHigherOrLower is Script {
             helperConfig,
             config.link,
             config.subscriptionId,
-            config.coin
+            address(coinx)
         );
     }
 }
