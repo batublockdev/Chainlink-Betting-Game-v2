@@ -3,6 +3,9 @@
 
 A fully on-chain betting game where users wager on whether the next card drawn will be **higher**, **equal**, or **lower** than the previous one. Built with Solidity, powered by **Chainlink VRF v2+**, and tokenized using a custom `Coin` ERC-20 contract.
 
+🌐 **Live App**: [https://ts-betting-game-ui-web3.vercel.app](https://ts-betting-game-ui-web3.vercel.app/)  
+📹 **Demo Video**: [Watch on YouTube](https://youtu.be/irOV2GThzA4) <!-- Replace with your actual video link -->
+
 ---
 
 ## 🛠️ Features
